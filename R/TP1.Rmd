@@ -1,0 +1,169 @@
+---
+title: "test"
+output: html_document
+---
+
+## Packages
+
+```{r}
+library(wooldridge) #download database
+library(tidyverse)c
+library(stargazer) #to draw outpout tables
+library(lmtest) #to test linear progressions models
+library(AER) #contains some usefull econometrics functions in R
+```
+
+##we want to explain wage with others variables
+##so we load the data
+
+```{r}
+data("wage2") #to load the data
+
+head(wage2, n=20) #to see the first 20 entries
+```
+```{r}
+summary(wage2)
+```
+
+```{r}
+summary(wage2$educ) 
+```
+## summary() : Min, Max, ...
+
+#How many people live in a Urban area ?
+## table() : gives the frequency
+
+
+```{r}
+table(wage2$urban)
+```
+
+```{r}
+# R syntax :
+table(wage2$married, wage2$urban, dnn = c("married", "urban"))
+
+#tidyverse syntax 
+wage2 %>%
+  count(married, urban)
+```
+
+#what is the average wage for married people ?
+#agregate()
+```{r}
+#R syntax :
+aggregate(wage~married, data = wage2, FUN=mean)
+
+##tidyverse syntax :
+wage2 %>%
+  group_by(married) %>%
+  summarise(mean(wage))
+
+```
+
+# What is the correlation between wage and education ? Is this correlation significant ?
+#cor() = correlation
+```{r}
+
+cor(wage2$wage, wage2$educ)
+#is the correlation significant ?
+cor.test(wage2$wage, wage2$educ)
+
+#confidence interval : voir la significance dans le cours, proche de 0 plus y a de la correlation
+#signficance: proof your hypothesis (like this variable explains this variable)
+```
+# estimate a regression model ...
+#lm()
+#name of the model<-lm(dependent~indep1+indep2..., data = wage2)
+```{r}
+m1<- lm(wage ~ IQ, data = wage2)
+
+#R syntax
+summary(m1) # to check what my model 1 gives
+
+#option 2 : show results with stargaze : pas eu le temps de noter voir correc
+stargazer(m1, type = "text")
+
+#prédire pour an increase de l'IQ de 15 points :
+#estimate = value which explain others (B coefficient)
+#pr = signifance (p-value), here its close to 0, so IQ is relevant
+#wage = B0(=intercept) + B1(IQ = 8.3) + e(epsilon)
+#if IQ increases by 1 unit => my wage increases by 8.3
+#Signif codes= from 0 to 0.001 its ***, from ...
+
+
+15*8.3 #124.5 dollars increase in wage for an increase of 15 pts of IQ
+
+#Multiple R-squared = Is my model is well explaining ? y a d'autres variables qui peuvent expliquer wage. Donc a quel point IQ the closer is to 1 so more my value explique bien? Plus c proche de 1 plus ca explique bien.
+#significance = c'est different de multiple R-squared parce que significance c'est a quel point c'est relevant la correlation entre 2 variables
+```
+```{r}
+#log(wage) : transforme en pourcentage
+wage2$lwage <- log(wage2$wage) #creating a new variable lwage et ensuite affection des valeurs en pourcentage de wage, dans une nouvelle colonne lwage qu'on crée
+
+
+m2<- lm(lwage ~ IQ, data = wage2) #on crée le model m2
+stargazer(m2, type = "text") # show results
+```
+```{r}
+
+#voir le document quelle a montré avec une grille selon les types de regressions, comment on interprète
+m3<- lm(lwage ~ IQ + educ+exper+black+tenure+married+south, data = wage2)
+stargazer(m3, type = "text") # show results
+```
+## On passe au IV
+
+```{r}
+#Run the model that estimates the return to education for men
+# explain wage by education
+
+m4<- lm(lwage ~ educ, data = wage2)
+stargazer(m4, type = "text") # show results
+
+#is there a possible source of endogenity : education can be influenced by ability, ou l'IQ
+#an instrument : variable that explains endogenious variables. Here we will try to explain education
+#Is there a variable that explains education but not explainging wage : for exemple education of parents : influence wage threw education. Number of sibligns can also be an IV. A lot of siblings, less chances to long education
+
+```
+```{r}
+#We have to test 2 criterias : sibs correlated to educ ?
+# Positive or neg corre between IV and endogenous variables
+# IV doesnt explain dependent var
+  
+
+#first stage : sibs explain education
+# second stage : education will explain wage
+  
+#sib is negatibly correlated to education
+
+#lm() = was for OLS
+#ivreg() = is for IV
+#ivreg(dependent vari ~ independent var) | instrument, data = name of data)
+# avant le pipe cest le modele que je veux estimer : genre educ + south + black
+# mais educ est endogene, mais peut etre explique par sibs
+# so wage va etre expliqué par ca + après le pipe je vais mettre le IV model : sib + south + black
+# si la variable endogene est a la deuxieme place, faut mettre le IV à la deuxieme place derriere le pipe.
+#ivreg(dependent vari ~ independentvar + identvar2(endogene) + indentvar3) | independentvar + instrument + indentvar3, data = name of data)
+ivmodel <- ivreg(lwage ~ educ | sibs, data = wage2)
+summary(ivmodel)
+stargazer(ivmodel, type = "text")
+```
+
+```{r}
+
+#refaire la wage, avec en variable endogene education, avec birth order comme IV
+ivmodel2 <- ivreg(lwage ~ educ | brthord, data = wage2)
+summary(ivmodel)
+stargazer(ivmodel2, type = "text")
+```
+```{r}
+#regresser lwage avec educ south, married, experience correcting for endogene educ by using brthord
+
+#ivmodel3 <-ivreg(lwage ~ married + educ + south + experience) | married + brthord + south + exper, data = wage2) jsp pk ca marche pas
+
+ivmodel2 <- ivreg(lwage~educ+south+married+exper|brthord+south+married+exper, data=wage2)
+stargazer(ivmodel2, type = 'text')
+
+summary(ivmodel)
+stargazer(ivmodel3, type = "text")
+```
+
