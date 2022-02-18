@@ -1,0 +1,695 @@
+---
+title: 'Econometrics TP 2021-2022: OLS & IV Regression'
+author: "Maria Teresa Aguilar Rojas"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+---
+
+<br>
+
+## Packages
+
+```{r echo = T, results = 'hide', message=FALSE, warning=FALSE}
+library(wooldridge) # To download database
+library(tidyverse) # Tidyverse packages
+library(stargazer) # To draw output tables 
+library(lmtest) # To test linear regression models
+library(AER) # Contains some useful applied econometrics functions in R
+```
+
+<br>
+
+## Data
+
+We will use data from the following textbook:
+Wooldridge, Jeffrey M., 1960-. (2012). Introductory econometrics : a modern approach. Mason, Ohio: South-Western Cengage Learning
+
+```{r echo=T, message=FALSE, warning=FALSE}
+data("wage2") # To load the data
+
+head(wage2, n=20) # To check the 20 first entries of the database
+```
+
+<br>
+The description of the variables is as follow:
+
+
+| Variable        | Description                     | 
+| :-------------  | :------------------------------:|
+|  1. wage        | monthly earnings                |
+|  2. hours       | average weekly hours            |
+|  3. IQ          | IQ score                        |
+|  4. KWW         | knowledge of world work score   |
+|  5. educ        | years of education              |
+|  6. exper       | years of work experience        |
+|  7. tenure      | years with current employer     |
+|  8. age         | age in years                    |
+|  9. married     | =1 if married                   |
+| 10. black       | =1 if black                     |
+| 11. south       | =1 if live in south             |
+| 12. urban       | =1 if live in SMSA              |
+| 13. sibs        | number of siblings              |
+| 14. brthord     | birth order                     |
+| 15. meduc       | mother's education              |
+| 16. feduc       | father's education              |
+| 17. lwage       | natural log of wage             |
+
+
+<br>
+Before we start, let's look at the summary of the data:
+
+```{r, message=FALSE, warning=FALSE}
+summary(wage2)
+```
+
+<br>
+
+## Descriptive statistics
+
+<br>
+\noindent
+**1.** Find the average education level in the sample. What are the lowest and highest years of education?
+
+```{r, message=FALSE, warning=FALSE}
+summary(wage2$educ)
+```
+<br>
+
+The average education level in the sample is 13.47 years. The lowest corresponds to 9 years of education and the highest is 18 years of education. 
+
+
+<br>
+\noindent
+**2.** How many people live in urban areas? how many people live in rural areas? 
+
+```{r, message=FALSE, warning=FALSE}
+table(wage2$urban)
+```
+<br>
+
+Out of 935 people in our sample, 671 live in urban areas, while 264 live in rural areas. 
+
+<br>
+\noindent
+**3.** How many people live in urban areas and are married?
+
+
+```{r, message=FALSE, warning=FALSE}
+# Option 1
+table(wage2$married, wage2$urban, dnn = c("married", "urban")) # To calculate a cross tabulation
+
+# Option 2: Tidyverse syntax
+wage2 %>%
+  count(married, urban) 
+
+```
+
+<br>
+Out of 935 people in our sample, 594 live in urban areas and are married.
+
+<br>
+\noindent
+**4.** What is the average wage for married people? 
+
+```{r, message=FALSE, warning=FALSE}
+# Option 1
+aggregate(wage~married, data = wage2, FUN=mean)
+
+# Option 2: Tidyverse syntax
+wage2 %>% 
+  group_by(married) %>%
+  summarise(mean(wage))
+
+```
+<br>
+
+The average wage for married people is of 977.0479 dollars. 
+
+<br>
+\noindent
+**5.** What is the correlation between wage and education? Is this correlation significant?
+
+```{r, message=FALSE, warning=FALSE}
+cor(wage2$wage, wage2$educ)
+```
+The correlation between wage and education is of 0.3271087.
+
+
+To test if the correlation is significant:
+```{r, message=FALSE, warning=FALSE}
+cor.test(wage2$wage, wage2$educ)
+```
+
+Yes, the correlation is significant (p-value < 2.2e-16).
+
+<br>
+\noindent
+**6.** Get the correlation table for all the variables of the dataset
+
+```{r, message=FALSE, warning=FALSE}
+stargazer(cor(wage2), type = "text")
+```
+<br>
+
+
+<br>
+\noindent
+**7.** Find the average salary and average IQ in the sample. what is the sample standard deviation of IQ? (IQ scores are standardized so that the average in the population is 100 with a SD equal to 15)
+
+```{r, message=FALSE, warning=FALSE}
+# Method 1 : Basic R syntax
+mean(wage2$IQ)
+mean(wage2$wage)
+sd(wage2$IQ)
+
+# Method 2: Tidyverse syntax
+ wage2 %>%
+  summarise(
+    mean_IQ = mean(IQ),
+    mean_wage = mean(wage),
+    sd_IQ = sd(IQ),
+    count = n()
+    )
+```
+<br>
+
+
+## OLS Regression 
+
+\noindent
+**8.** Estimate the simple regression model where a one-point increase in IQ changes wage by a constant dollar amount. use this model to find the predicted increase in wage for an increase in IQ of 15 points. Does IQ explain most of the variation in wage?
+
+
+```{r, message=FALSE, warning=FALSE}
+m1 <- lm(wage ~ IQ, data = wage2)
+
+#option 1: Basic R syntax to how regression results
+summary(m1)
+
+#Option 2: Show the regression results with stargarzer package
+stargazer(m1, type = "text")
+
+
+m1$coefficients["IQ"]
+
+15*8.303 # 124.5 dollars increase in wage for an increase in IQ of 15 points
+
+```
+
+The predicted increase in wage for an increase in IQ of 15 points is of 124.5 dollars. 
+IQ does not explain most of the variation in wage ($R^2 = 9.6$). However, this does not imply that the variable is non-important! 
+
+<br>
+\noindent
+**9.** Now estimate a model where each one-point increase in IQ has the same percentage effect on wage. If IQ increases by 15 points, what is the approximate percentage increase in predicted wage?
+
+```{r, message=FALSE, warning=FALSE}
+
+wage2$lwage <- log(wage2$wage)
+  
+m2 <- lm(lwage ~ IQ, data = wage2)
+
+
+stargazer(m2, type = 'text')
+
+0.9*15  
+
+```
+<br>
+
+The percentage increase in predicted wage for an increase in IQ of 15 points is of 13.5%. 
+
+Remark: You can check the table in the following link, to better understand the interpretation of the beta coefficients, according to the model
+https://sites.google.com/site/curtiskephart/ta/econ113/interpreting-beta
+
+<br>
+\noindent
+**10.** Estimate the following model:
+
+<center>
+$log(wage) = \beta_0 + \beta_1 IQ  + \beta_2 educ  + \beta_3 exper + \beta_4 black + \beta_5 tenure + \beta_6 married + \beta_7 south$
+</center>
+
+
+```{r, message=FALSE, warning=FALSE}
+m3 <- lm(lwage ~ IQ + educ + exper + black + tenure + married + south, data = wage2) 
+
+stargazer(m3, type = 'text')
+```
+
+<br>
+\noindent
+**11.** What is the interpretation of $\beta_2$? and of $\beta_4$?
+
+* $\beta_2$ : One year more of education increases predicted wage by 5.7%.
+
+* $\beta_4$ : The average wage difference between black and non-black people is of -11.4%. Then, black people earn 11.4% less than non-black people. 
+
+<br>
+\noindent
+**12.** Consider the following model:
+
+<center>
+$log(wage) = \beta_0 + \beta_1 educ + \beta_2 exper + \beta_3 tenure + u$
+</center>
+
+<br>
+
+(i) State the null hypothesis that another year of general workforce experience has the same effect on log wage as another year of tenure with the current employer. 
+(ii) Test the null hypothesis against a two sided alternative at the 5% significance level, by constructing a 95% confidence interval. What do you conclude?
+
+<br>
+*Solutions*
+
+(i) The null hypothesis of interest is $H_0: \beta_2 =  \beta_3$.
+
+(ii) Let $\theta_2 = \beta_2 - \beta_3$. We replace $\beta_2$ in the initial model, which gives:
+
+<center>
+Step 1:  $\theta_2 + \beta_3 = \beta_2$
+ 
+Step2: $log(wage) = \beta_0 + \beta_1 educ + (\theta_2 + \beta_3)  exper + \beta_3 tenure + u$
+ 
+Step3:  $log(wage) = \beta_0 + \beta_1 educ + \theta_2exper + \beta_3exper + \beta_3 tenure + u$
+ 
+</center>
+
+After replacement, our model is as follows: 
+
+<center>
+$log(wage) = \beta_0 + \beta_1 educ + \theta_2 exper + \beta_3(exper + tenure) + u$
+</center>
+
+```{r, message=FALSE, warning=FALSE}
+
+wage2 <- wage2 %>%
+  mutate(exper_tenure = exper+tenure)
+
+
+m4 <- lm(lwage ~ educ + exper + exper_tenure, data = wage2) 
+summary(m4)
+
+stargazer(m4, type = 'text')
+```
+
+This turns out to be about 0.002 ± 1.96(.0047), or about -.0072 to .0112. Because zero is in this CI, $\theta_2$ is not statistically different from zero at the 5% level, and we fail to reject $H_0: \beta_2 =  \beta_3$ at the 5% level.
+
+
+<br>
+\noindent
+**13.** Use OLS to estimate the following equation:
+
+<center>
+
+$log(wage) = \beta_0 + \beta_1 educ  + \beta_2 exper + \beta_3 educ^2 + u$
+
+</center>
+
+
+(i) Is $educ^2$ statistically significant at a 10% level? at a 5% level? at a 1% level? 
+(ii) How can we interpret $\beta_3$? 
+(iii) What is the return to the 5th year of education?
+
+<br>
+
+*Solutions*
+
+```{r, message=FALSE, warning=FALSE}
+wage2 <- wage2 %>% mutate(educ2 = educ*educ)
+m5 <- lm(lwage ~ educ + exper + educ2, data = wage2) 
+stargazer(m5, type = 'text')
+```
+<br>
+$educ^2$ is statistically significant at a 10% level, but not at a 5% or 1% level. 
+$\beta_3 = -0.005 $, this implies educ has a diminishing effect on wage. 
+
+
+The first year, the return to education is 22.6%. The fifth year, it is: $\% \Delta \hat{wage} \approx 100[0.226 - 2(0.005)(5)]$
+
+```{r, message=FALSE, warning=FALSE}
+ 100*(0.226 - 2*(0.005*5))
+```
+
+
+<br>
+\noindent
+**14.** Consider a model: 
+<center>
+$log(wage) = \beta_0 + \beta_1 educ  + \beta_2 exper + \beta_3 educ*exper + u$
+</center>
+
+(i) State the null hypothesis that the return to education does not depend on the level of exper. What do you think is the appropriate alternative?
+(ii) Test the null hypothesis in (ii) against your stated alternative. 
+(iii) Interpret $\beta_3$.
+
+<br>
+*Solutions*
+
+(i) $H_0 = \beta_3$. If we think that education and experience interact positively – so that people with more experience are more productive when given another year of education – then $\beta_3 > 0$ is the appropriate alternative.
+
+<br>
+(ii)
+```{r, message=FALSE, warning=FALSE}
+wage2 <- wage2 %>% mutate(educ_exper = educ*exper)
+
+m6 <- lm(lwage ~ educ + exper + educ_exper, data = wage2)
+stargazer(m6, type = 'text')
+```
+
+```{r, message=FALSE, warning=FALSE}
+linearHypothesis(m6, "educ_exper=0", type=c("t"))
+```
+<br>
+(iii) People with more experience are more productive when given another year of education by 0.3%
+
+<br>
+\noindent
+**15.** Use the model given in question 13 to test for the presence of heteroskedasticity. If there is presence of heteroskedasticity, get the robust SE. 
+
+*Note:  heteroskedasticity happens when the standard deviations of a predicted variable, monitored over different values of an independent variable or as related to prior time periods, are non-constant.*
+
+```{r, message=FALSE, warning=FALSE}
+# Breusch-Pagan test for Heteroskedasticity
+bptest(m3)
+
+# Robust SE
+coeftest(m3, vcovHC)
+stargazer(coeftest(m3, vcovHC), type ='text')
+```
+
+<br>
+
+## Plots
+
+<br>
+
+**16** Draw a plot of predicted wage with respect to IQ
+
+
+```{r, message=FALSE, warning=FALSE}
+predictedvalues <- predict(m3)
+res <- residuals(m3)
+
+wage2 %>% ggplot(aes(x = IQ, y = predictedvalues)) +
+     geom_point() +
+     geom_smooth(method = "lm", se = FALSE)
+```
+
+<br>
+
+**17** Draw a plot of predicted wage with respect to education
+```{r, message=FALSE, warning=FALSE}
+wage2 %>% 
+  ggplot(aes(x = educ, y = predictedvalues)) +
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE)
+
+```
+
+<br>
+**18** Draw a plot of the residuals with respect to IQ. Only looking at the graph, can you spot for the presence of heteroskedasticity?
+
+```{r, message=FALSE, warning=FALSE}
+# Check for heteroskedasticity
+wage2 %>% 
+  ggplot(aes(x = IQ, y = res)) +
+  geom_point() +
+  geom_hline(aes(yintercept=mean(res)))
+
+```
+
+
+<br>
+
+## IV
+
+We use data *wage2* to estimate the return to education for men.
+ 
+\noindent 
+**19** Run the model that estimates the return to education for men
+ 
+ <br>
+We estimate the following model:
+
+<center>
+$log(wage) = \beta_0 + \beta_1 educ + u$
+</center>
+
+```{r}
+model <- lm(lwage ~ educ, data = wage2)
+summary(model)
+```
+ 
+ 
+ <br>
+\noindent 
+**2.** Is there a possible endogeneity in one of the variables of the model? If so, why? what type of endogeneity do you encounter?
+
+One of the variables is endogenous (not randomly assigned). Education is an endogenous variable. For example, parents income is going to be related to the choice of education of the kid. In this case, the type of endogeneity is the omitted variable bias. 
+
+ <br>
+\noindent 
+**3.** Suppose we choose the variable `sibs` (number of siblings) as an instrument to correct for the endogeneity in the initial model. For this instrument:
+
+
+(i) Do the first stage regression of the IV on the endogenous variable 
+
+```{r} 
+# Let's look at first stage 
+fs1 <- lm(educ ~ sibs, data = wage2)
+summary(fs1) 
+
+# F test of coefficient on the instrument 
+linearHypothesis(fs1, "sibs=0", type=c("F")) 
+```
+<br>
+
+(ii) Is the instrument correlated with the endogenous variable? What is the sense of this correlation? Explain.
+
+Yes, the IV `sibs` is **negatively** correlated with the endogenous variable `educ`. According to the first stage regression of `sibs` on `educ`, the coefficient of `sibs` is equal to -0.227. This coefficient is significant at a 1% level. 
+
+The correlation coefficient is used to measure the strength of the linear relationship between two variables. For our case, this means that men with more siblings attain less years of education. 
+
+*Remark:* A suitable IV must be correlated with the endogenous variable. 
+
+<br>
+
+(iii) Argue if it is exogenous. 
+
+`sibs` is probably not exogenous. It might be correlated with some socio-economic characteristics that influence  wage, such as the family background. 
+
+
+<br>
+\noindent 
+**4.** Run the 2SLS model, using `sibs` as an IV for `educ` 
+
+(i) Using the function ivreg in R
+
+```{r}
+# Perform an instrumental variable's regression 
+ivmodel <- ivreg(lwage ~ educ | sibs,data = wage2)
+
+summary(ivmodel)
+```
+
+<br> 
+(ii) Manually
+
+```{r}
+summary(lm(lwage ~ fs1$fitted.values, data = wage2))
+```
+
+<br>
+Same results as with ivreg, but SEs slightly different.
+
+<br>
+\noindent 
+**5.** To convince yourself that using `sibs` as an IV for educ is not the same as just plugging `sibs` for educ and running an OLS regression, run the regression of log(wage) on `sibs` and explain your findings. 
+
+```{r}
+summary(lm(lwage ~ sibs, data = wage2))
+```
+
+<br>
+This is a reduced form simple regression equation. It shows that, controlling for no other factors, one more sibling in the family is associated with monthly salary that is about 2.8% lower. The t statistic on `sibs` is about –4.73. Of course `sibs` can be correlated with many things that should have a bearing on wage including, as we already saw, years of education.
+
+<br>
+\noindent
+**6.** The variable `brthord` is birth order (`brthord` is one for the first-born child, two for a second-born child, and so on). Explain why `educ` and `brthord` might be negatively correlated. 
+
+
+It could be that older children are given priority for higher education, and families may hit budget constraints and may not be able to afford as much education for children born later. 
+
+<br>
+\noindent
+**7.** Regress `educ` on `brthord` to determine whether there is a statistically significant negative correlation. 
+
+<br> 
+The simple regression of educ on brthord gives
+
+```{r}
+fs2 <- lm(educ ~ brthord, data = wage2)
+summary(fs2)
+
+# F test of coefficient on the instrument 
+linearHypothesis(fs2, "brthord=0", type=c("F")) 
+```
+
+<br> 
+(Note that `brthord` is missing for 83 observations.) The equation predicts that every one-unit increase in `brthord` reduces predicted education by about 0.28 years. 
+
+<br>
+\noindent
+**8.** What is the difference in predicted education for a first-born and a fourth born child?
+
+
+```{r}
+preduc1 <- fs2$coefficients[["brthord"]]
+
+preduc4 <- fs2$coefficients[["brthord"]]*4
+
+preduc1 - preduc4 #difference in predicted education for a first-born an fourth born child
+```
+
+<br>
+The difference in predicted education for a first-born and fourth-born child is about 0.85 years.
+
+<br>
+\noindent
+**9.** Use `brthord` as an IV for `educ`. Report and interpret the results. Report and interpret the results.
+
+```{r}
+ivmodel2 <- ivreg(lwage ~ educ | brthord, data = wage2)
+summary(ivmodel2)
+```
+
+<br>
+(The R-squared is negative.) This is much higher than the OLS estimate (.060) and even above the estimate when `sibs` is used as an IV for educ (.122). Because of missing data on brthord, we are using fewer observations than in the previous analyses.
+
+$R^2$  compares the fit of the chosen model with that of a horizontal straight line (the null hypothesis). If the chosen model fits worse than a horizontal line, then R2 is negative.
+
+<br>
+\noindent
+**10.** Now, suppose that we include number of siblings as an explanatory variable in the wage equation; this controls for family background, to some extent: 
+
+<center>
+
+$log(wage) = \beta_0 + \beta_1 educ + \beta_2 sibs + u$
+
+</center>
+
+<br>
+
+Suppose that we want to use `brthord` as an IV for `educ`, assuming that `sibs` is exogenous. The reduced  form for `educ` is
+
+<center>
+
+$educ= \pi_0 + \pi_1 sibs + \pi_2 brthord + v$
+
+</center>
+
+<br>
+
+(i) State and test the identification assumption.
+
+
+```{r}
+fs3 <- lm(educ ~ sibs + brthord, data = wage2)
+
+summary(fs3)
+```
+
+<br> 
+
+We need $\pi_2 \neq 0$ in order for the $\beta_j$ to be identified. We take the null to be $H_0: \pi = 0$, and look to reject $H_0$ at a small significance level. The regression of educ on sibs and brthord (using 852 observations) yields $\hat\pi_2 = −0.153$ and  $se(\hat\pi_2) = 0.057$. The t statistic is about –2.68, and p-value is about 0.007 which rejects $H_0$ fairly strongly. Therefore, the identification assumptions appears to hold.
+
+<br>
+
+(ii) Estimate the previous equation using `brthord` as an IV for educ (and `sibs` as its own IV). Comment on the standard errors for $\beta_{educ}$ and $\beta_{sibs}$
+
+
+```{r}
+ivmodel3 <- ivreg(log(wage) ~ educ + sibs | brthord + sibs, data = wage2)
+summary(ivmodel3)
+```
+
+<br>
+
+The standard error on $\beta_{educ}$ is much larger than we obtained in Q9. The 95% CI for $\beta_{educ}$ is roughly −.010 to .284, which is very wide and includes the value zero. The standard error of $\beta_{sibs}$ is very large relative to the coefficient estimate, rendering `sibs` very insignificant.
+
+<br>
+\noindent
+**11.** Using the fitted values from Q10-(i), `educ`, compute the correlation between `educ` and `sibs`. Use this result to explain your findings from Q10-(ii)
+
+```{r}
+fitted.educ <- fs3$fitted.values
+
+sibs <- fs3$model[["sibs"]]
+
+cor(fitted.educ, sibs)
+```
+
+<br>
+
+Letting $educ$ be the first-stage fitted values, the correlation between $sibs$ and $\hat{educ}$ is about −0.930, which is a very strong negative correlation. This means that, for the purposes of using IV, multicollinearity is a serious problem here, and is not allowing us to estimate $\beta_{educ}$ with much precision.
+
+<br>
+
+\noindent
+**12.** Father and mother education might influence an individual's education as well. Run the first stage regression of `educ` with respect to `feduc` and `meduc`
+
+```{r}
+fs4 <- lm(educ ~ feduc + meduc, data = wage2)
+summary(fs4)
+```
+<br>
+\noindent
+**13.** Discuss if  `feduc` and `meduc` are good instruments for educ when regressing it to `log(wage)`
+
+Same as for sibs. 
+
+<br>
+
+\noindent 
+**14.** Suppose `feduc` and `meduc` are exogenous. Perform the following 2SLS model of `log(wage)` and educ, where `feduc` and `meduc` are both instruments for log(wage)
+
+<center>
+$log(wage) = \beta_0 + \beta_1 IQ  + \beta_2 educ  + \beta_3 exper + \beta_4 black + \beta_5 tenure + \beta_6 married + \beta_7 south$
+</center>
+
+```{r, message=FALSE, warning=FALSE}
+ivmodel4 <- ivreg(lwage ~ IQ + educ + exper + black + tenure + married + south | 
+                    IQ + sibs + feduc + meduc + exper + black + tenure + married + south, data = wage2) 
+
+summary(ivmodel4)
+```
+
+<br>
+
+**15.** Test for overidentifying restrictions
+
+```{r, message=FALSE, warning=FALSE}
+# compute the J-statistic
+
+iv_OR <- lm(residuals(ivmodel4) ~ IQ + feduc + meduc + exper + black + tenure + married + south, data = ivmodel4$model)
+
+summary(iv_OR)
+
+iv_ORtest <- linearHypothesis(iv_OR, 
+                               c("feduc = 0", "meduc = 0"), 
+                               test = "Chisq")
+
+# compute correct p-value for J-statistic
+pchisq(iv_ORtest[2, 5], df = 1, lower.tail = FALSE)
+```
+
+
+
+
+
+
+
+

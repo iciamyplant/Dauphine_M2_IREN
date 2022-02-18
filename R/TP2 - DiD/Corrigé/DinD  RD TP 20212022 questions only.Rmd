@@ -1,0 +1,169 @@
+---
+title:  "Diff-in-Diff and RD Class - Questions"
+output: html_notebook
+author: Maria Teresa Aguilar Rojas
+---
+---
+title:  "Diff-in-Diff and RD Class"
+output: html_notebook
+author: Maria Teresa Aguilar Rojas
+---
+
+<style>
+body {
+text-align: justify}
+</style>
+
+
+<br>
+
+The packages you will need for this exercise are the following: 
+
+```{r echo = T, results = 'hide', message=FALSE, warning=FALSE}
+library(tidyverse)     # For ggplot, %>%, mutate, filter, group_by...
+library(haven)         # For loading data from Stata
+library(broom)         # For showing models as data frames
+library(fixest)        # For fast, nice, fixed effects regression
+library(modelsummary)  # For side-by-side regression tables
+library(rdrobust)
+library(rddensity)
+library(modelsummary)
+library(stargazer)
+
+# This turns off this message that appears whenever you use summarize():
+# `summarise()` ungrouping output (override with `.groups` argument)
+options(dplyr.summarise.inform = FALSE)
+```
+
+<br>
+
+## Difference-in-Differences Exercise
+
+Based on 2004's paper of Di Tella and Schargrodsky, we will analyze the effect of increased police presence on crime. Following a synagogue bombing in Buenos Aires, Argentina on July 18, 1994, extra municipal police were assigned to protect synagogues around the city. The increase of police patrols on some city blocks, but not others, means that there is arguably a treatment group and control group for increased police presence, which Di Tella and Schargrodsky used to measure the effect of extra police on car thefts.
+
+The dataset (`MonthlyPanel.dta`) is a Stata data file nearly 10,000 observations. This data comes from [Di Tella and Schargrodsky's data appendix available at their study's *AER* webpage](https://www.aeaweb.org/articles?id=10.1257/000282804322970733). This is non-experimental data that includes counts of car thefts for every city block in Buenos Aires from April to December 1994. There are 12 variables:
+
+- `observ` (we'll rename to `block`): The ID number of the block
+- `barrio`: The barrio (neighborhood) for the block
+- `calle`: The street for the block
+- `altura`: The street number
+- `institu1` (we'll rename to `same_block`): Indicator variable marking if there's a Jewish institution on the block (1 if yes, 0 if no)
+- `institu3`: Indicator variable marking if there's a Jewish institution within one block (1 if yes, 0 if no)
+- `distanci` (we'll rename to `distance`): Distance to the nearest Jewish institution, measured in blocks
+- `edpub`: Indicator variable marking if there's an educational building or embassy on the block (1 if yes, 0 if no)
+- `estserv`: Indicator variable marking if there's a gas station on the block (1 if yes, 0 if no) 
+- `banco`: Indicator variable marking if there's a bank on the block (1 if yes, 0 if no) 
+- `totrob` (we'll rename to `car_theft`): Total number of car robberies
+- `mes` (we'll rename to `month`): Month
+
+<br>
+
+Before answering the questions, we will run the data and do a few transformations to some of the variables, as follows:
+
+```{r, warning=FALSE, message=FALSE}
+setwd('C:/Users/teres/OneDrive/Documents/Teaching/Econometrics course')
+
+# Load terror data
+crime <- read_dta("MonthlyPanel.dta") %>% 
+  # The attack happened on July 18. The authors omitted data from July 19-31, so
+  # all July observations are from before the attack. Make a new indicator
+  # variable `after` to mark if the row is from before or after the attack
+  mutate(after = mes > 7) %>% 
+  # There are some weird months in the data like 73. Filter out anything > 12
+  filter(mes <= 12) %>% 
+  # Rename some columns to be more readable
+  rename(same_block = institu1,
+         distance = distanci,
+         car_theft = totrob,
+         month = mes,
+         block = observ) %>% 
+  # Create indicator variables for the distance of each block to a synagogue
+  mutate(one_block_away = ifelse(distance == 1, 1, 0),
+         two_blocks_away = ifelse(distance == 2, 1, 0),
+         more_than_two_away = ifelse(distance > 2, 1, 0)) %>% 
+  # Make these factors/categories
+  mutate(block = as.factor(block),
+         month = as.factor(month),
+         same_block_factor = as.factor(same_block))
+```
+
+<br>
+
+**1.** Imagine you went out and collected data on the presence of police in each city, and the amount of crime in each city, and found a positive relationship. Does this mean police *cause* crime? Explain.
+
+<br>
+
+
+**2.** How is this data suitable for a diff-in-diff design? What would we be comparing here? Be specific about the pre/post treatment/control groups.
+
+<br>
+
+
+**3.** Why does it help the researchers that the police were dispatched to certain blocks because of terrorist attacks?
+
+<br>
+
+**4.** What can we say about the parallel trends assumption in this case? Does it hold up?
+
+<br>
+
+**5.** Calculate "by-hand" the average number of car thefts in the treatment and control groups before and after the attack. (Hint: group by `same_block` and `after` and find the average of `car_theft`.) What is the diff-in-diff estimate
+
+<br>
+
+**6.** Run a regression model to find the diff-in-diff estimate of the effect of the increased police presence (`after`) on car thefts (`car_theft`) (Hint: remember that you'll be using an interaction term).
+
+<br>
+
+
+**7.** Compare the results "by hand" and those with the OLS regression. Explain the advantages of using the regression. 
+
+<br>
+
+
+## Regression discontinuity design
+
+
+The packages we will need for the RD design are the following:
+
+```{r echo = T, results = 'hide', message=FALSE, warning=FALSE}
+library(tidyverse)  # For ggplot, %>%, and gang
+library(broom)      # For converting models into tables
+library(rdrobust)   # For robust nonparametric regression discontinuity
+library(rddensity)  # For nonparametric regression discontinuity density tests
+library(stargazer)  # For side-by-side tables
+library(foreign)    # For reading dta databases
+```
+
+<br>
+
+For this exercise, we will imagine the following situation: At the beginning of 6th grade, students take a test to determine if they can participate in an academically and intellectually gifted (AIG) program during middle school and high school. Acceptance is based on grades: Students who scored 75 or more are allowed to participate in the program. Students participating in the AIG program are given extra work and lessons. At the end of high school, students take a final test (with a maximum of 100 points) to measure how much they learned overall.
+The following hypothetical data is used to depict this exercise:
+
+```{r echo = T, results = 'hide', message=FALSE, warning=FALSE}
+# Load data
+setwd("C:/Users/teres/OneDrive/Documents/Teaching/Econometrics course")
+aig_program <- read_csv("aig_program.csv")
+```
+
+To do a RDD, we will develop the following steps: 
+<br>
+
+### Step 1: Determine if process of assigning treatment is rule-based
+
+<br>
+
+### Step 2: Determine if the design is fuzzy or sharp
+
+<br>
+
+### Step 3: Check for discontinuity in running variable around cutpoint
+
+<br>
+
+### Step 4: Check for discontinuity in outcome across running variable
+
+<br>
+
+### Step 5: Measure the size of the effect
+
