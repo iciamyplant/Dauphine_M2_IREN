@@ -1,0 +1,2 @@
+"0","Hisp_Treatment = filter(Hisp, treatment_locality == ""Treatment"") #Make a new dataset based on HISP that only includes observations from the localities that were randomly chosen for treatment"
+"0","Hisp_Treatment"

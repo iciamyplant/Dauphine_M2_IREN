@@ -1,0 +1,179 @@
+---
+title: "Part 1: Econometrics"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)   # ggplot(), %>%, mutate(), and friends
+library(scales)      # Format numbers with functions like comma(), percent(), and dollar()
+library(broom)       # Convert models to data frames
+library(stargazer)   # Makes nice tables
+library(lmtest)      # To test linear regression models
+library(AER)         # Applied econometrics in R
+library(rdrobust)    # For robust nonparametric regression discontinuity
+library(rddensity)   # For nonparametric regression discontinuity density tests
+```
+
+
+## OLS Regression
+```{r}
+Hisp = read.csv(file = 'HISP.csv') #Create a dataset based on HISP
+Hisp_After = filter(Hisp, round == "After") #Create a dataset that only includes observations from after
+Hisp_After
+```
+
+#### 1. Build a regression model that estimates the effect of HISP enrollment on health expenditures
+```{r}
+m1<- lm(health_expenditures ~ enrolled_rp, data = Hisp_After)
+summary(m1)
+```
+
+Selon le modèle m1, une aumgentation d'une unité sur enrolled_rp, fait diminuer de 12.708€ les dépenses de santé d'un ménage. D'où, l'inscription au HISP a pour effet de diminuer les dépenses santé.
+
+Les valeurs de t-value sont importantes par rapport au standard error, ce qui peut indiquer qu'une relation existe bien. Nous observons que la valeur de P est significative (3 étoiles), appuie l'hypothèse qu'il existe bien une relation entre l'inscription au HISP et les dépenses de santé.
+
+Néanmoins le enrolled_rp n'explique pas la majeure partie de la variation des dépenses de santé (R-squared=23%). 
+
+#### 2. Build the same regression model but now include the following control variables: age_hh, age_sp, educ_hh, educ_sp, female_hh, indigenous, hhsize,dirtfloor, bathroom, land, hospital_distance, park, and sports. Report the results in a table.
+
+
+```{r}
+m2 <- lm(health_expenditures ~ enrolled_rp + age_hh + age_sp + educ_hh + educ_sp + female_hh + indigenous + hhsize + dirtfloor + bathroom + land + hospital_distance + park + sports, data = Hisp_After) 
+summary(m2)
+```
+
+##### 2.i Compared to the model in question 1, is the coefficient of enrollment underestimated or overestimated in Q1?
+
+Dans le modèle m2, nous observons qu'une aumgentation d'une unité sur enrolled_rp, fait diminuer non pas 12.708€ les dépenses de santé, mais de 9.815261€, soit 20% de moins. D'où, l'influence de la variable enrolled_rp sur les dépenses de santé a été sur-estimée.
+
+##### 2.ii Interpret the coefficient of age_hh
+
+Selon le modèle m2, une année de plus pour un chef de famille, augmente les dépenses de santé de 0.073957€. De plus, nous observons que la valeur de P est là encore significative (3 étoiles), ce qui appuie l'hypothèse qu'il existe bien une relation entre l'âge du chef de famille et les dépenses de santé.
+
+##### 2.iii What is the estimated effect in health expenditures for a household with a private bathroom, holding all other variables constant?
+
+Le fait d'avoir une salle de bain privée aumgente les dépenses de santé. Si un ménage de plus a une salle de bain privée, les dépenses de santé du ménage augmentent de 0.6869€. Là encore la valeur de P est significative.
+
+## Instrumental Variables Regression
+
+#### 3. Is there a possible endogeneity in one of the variables of the model? If so, why?
+
+Selon le modèle m2, une année de plus d'éducation du chef de ménage educ_hh augmente les frais de santé de 0.03977. On peut penser que la variable educ_hh est endogène, puisqu'il est possible que les personnes avec un grand nombre d'années d'éducation forment un ménage avec des personnes qui ont elles aussi un grand nombre d'années d'éducation educ_sp. Ainsi, les deux variables educ_hh et educ_sp seraient corréllées et endogènes. 
+
+#### 4. If there is endogeneity in one of the variables, find a possible instrument in the data and discuss if it is suitable to correct it.
+
+Nous pouvons supposer que plus le chef de famille et son conjoint ont un nombre important d'années d'éducation, moins ils sont pauvres. Ainsi, nous pouvons supposer que la variable poverty_index peut corriger l'endogénéité du modèle initial.
+
+```{r}
+fs1 <- lm(educ_hh ~ poverty_index, data = Hisp_After)
+summary(fs1)
+```
+
+Nous pouvons voir que pour un ménage plus riche d'un point, le niveau d'éducation du chef de famille augmente de 0.007344. Il est important de préciser que la valeur de P est de 0.001 (2 étoiles). Ce qui signifie que le coefficient n'est pas très significatif. Mais la variable instrumentale poverty_index reste quand même pertinente à utiliser puisqu'elle est corrélée avec la variable endogène educ_hh. 
+
+```{r}
+fs2 <- lm(educ_sp ~ poverty_index, data = Hisp_After)
+summary(fs2)
+```
+
+Nous constatons que pour un ménage plus riche d'un point, le niveau d'éducation du conjoint du chef de famille augmente de 0.00435. Le coefficient est significatif à 0.05, soit plus que pour l'exemple précédent. Cette fois encore, la variable instrumentale poverty_index est pertinente à utiliser puisqu'elle est également corrélée avec la variable endogène educ_sp. 
+
+#### 5. Run a 2SLS regression model using the previous instrument. Report the regression results in a table. After removing the endogeneity issue, what is the causal effect of enrollment in the HISP?
+
+```{r}
+ivmodel <- ivreg(health_expenditures ~ enrolled_rp + age_hh + age_sp + educ_hh + educ_sp + female_hh + indigenous + hhsize + dirtfloor + bathroom + land + hospital_distance + park + sports | enrolled_rp + age_hh + age_sp + poverty_index + poverty_index + female_hh + indigenous + hhsize + dirtfloor + bathroom + land + hospital_distance + park + sports, data = Hisp_After)
+
+summary(ivmodel)
+```
+
+
+Selon le modèle ivmodel, une aumgentation d'une unité sur enrolled_rp, fait diminuer de 9.436856€ les dépenses de santé d'un ménage (contrairement à 9.815261 sur le modèle m2). 
+
+D'où, l'utilisation de la variable instrumentale poverty_index a légèrement réduit l'estimation de l'effet de l'inscirption au HISP sur les dépenses santé. Nous constatons également que désormais le R-squared est d'environ 29%. Le enrolled_rp explique davantage la variation des dépenses de santé sur le ivmodel.
+
+## Difference-in-Differences Regression
+
+```{r}
+Hisp_Treatment = filter(Hisp, treatment_locality == "Treatment") #Make a new dataset based on HISP that only includes observations from the localities that were randomly chosen for treatment
+Hisp_Treatment
+```
+
+#### 6. Obtain the average of health_expenditures, age_hh, age_sp, educ_hh, educ_sp, female_hh, indigenous, hhsize,dirtfloor, bathroom, land,hospital_distance, park,sports for every time period in both the treatment and control groups (i.e. enrolled and not enrolled), and report them in a table. Analyze the differences in the variables for both treatment and control groups.
+
+
+```{r}
+Hisp_Treatment <- Hisp_Treatment %>%
+  mutate(is_enrolled = ifelse(enrolled == "Enrolled", 1, 0), the_round = ifelse(round == "After", 1, 0))
+Hisp_Treatment %>% 
+  group_by(round,enrolled) %>%
+  summarise(mean(health_expenditures), mean(age_hh), mean(age_sp), mean(educ_hh), mean(educ_sp), mean(female_hh), mean(indigenous), mean(hhsize), mean(dirtfloor), mean(bathroom), mean(land), mean(land), mean(hospital_distance), mean(park), mean(sports))
+```
+
+Nous pouvons remarquer que les personnes inscrites au HISP ont des dépenses de santé en moyenne inférieures au personnes non inscrites. Nous remarquons qu'avant la campagne les dépenses moyennes de santé pour les personnes inscrites au HISP sont supérieures à après la campagne passant de 14.4€ à 7.8€. Pour le personnes non inscrites au HISP c'est l'inverse, les dépenses de santé des ménages étaient moins importantes avant la campagne qu'après (20.7 contre 22.3).
+
+Nous pouvons également voir que l'âge du chef de famille des ménages inscrits au HISP est inférieur à celui du chef de famille des ménages non inscrits au HISP. Le chef de famille des ménageses isncrits au HISP ont en moyenne 42 ans (42.62702+41.65658/2) contre 52 ans pour les non inscrits (52.99449+52.02607/2).
+
+On peut également voir que les chefs de famille des ménages pratiquaient en moyenne plus de sport avant la campagne qu'après à la fois pour les personnes inscrites au HISP comme pour les non inscrits.
+
+
+#### 7. Run a regression model that estimates the difference-in-difference effect of being enrolled in the HISP program. Report the regression results in a table. What is the causal effect of HISP on health expenditures?
+
+
+```{r}
+m3 <- lm(health_expenditures ~ is_enrolled + the_round + is_enrolled*the_round, data = Hisp_Treatment)
+summary(m3)
+```
+
+Nous pouvons voir que le modèle m3 montre que l'inscription au HISP a un effet négatif sur les dépenses de santé des ménages à hauteur de -8.1629€. Cette hypothèse est appuyée par la valeur de P qui est significative (3 étoiles).
+
+
+#### 8. Run a second model that estimates the difference-in-difference effect, but control for the following variables: age_hh, age_sp, educ_hh, educ_sp, female_hh, indigenous, hhsize,dirtfloor, bathroom, land,hospital_distance, park, sports. Report the regression results in a table. How does the causal effect change?
+
+```{r}
+m4 <- lm(health_expenditures ~ is_enrolled + the_round + is_enrolled * the_round + age_hh + age_sp + educ_hh + educ_sp + female_hh + indigenous + hhsize + dirtfloor + bathroom + land + hospital_distance + park + sports, data = Hisp_Treatment)
+summary(m4)
+```
+
+Nous pouvons voir que le modèle m4 qui intègre des variables de contrôle montre lui aussi que l'inscription au HISP a un effet négatif sur les dépenses de santé des ménages. Cette fois à hauteur de -8.161552€. Ce résultat est très proche du -8.1629€ qui a été trouvé au modèle m3.
+
+## Summary
+
+#### 9. Summarize the results from the three methods (OLS, IV and Diff-in-Diff) in the following table, and discuss the advantages and disadvantages of one method of your choice.
+
+
+```{r}
+method = c('OLS', 'OLS', 'IV', 'Diff-in-Diff', 'Diff-in-Diff')
+including_control_variable = c('no', 'yes', 'yes', 'no', 'yes')
+estimate = c(m1$coefficients[2],m2$coefficients[2],ivmodel$coefficients[2],m3$coefficients[4],m4$coefficients[17])
+cbind.data.frame(method, including_control_variable, estimate)
+```
+
+
+Finalement, les modèles incluant des variables de contrôle prévoient que l'inscription au HISP fait baisser les dépenses de santé entre -8.162€ et -9.815€. Nous remarquons que le modèle OLS sans variables de contrôle avait largement sur-estimé l'influence de l'inscription du HISP sur les dépenses de santé. La méthode Diff-in-Diff estime l'influence la moins importante. Un avantage de la méthode Diff-in-Diff a été de prendre en compte un plus grand nombre de variables, ce qui rend l'estimation plus fiable, et lui donne le R-squared le plus grand.
+
+
+## Regression Discontinuity Design
+
+
+#### 10. Why choosing the bandwidth is important in regression discontinuity? What are the pros and cons of choosing a small/large bandwidth?
+
+Prenons l'exemple de l'impact de l'attribution d'une bourse scolaire au mérite sur les résultats des élèves. Il faut au minimum 15 de moyenne pour obtenir cette bourse. Si nous sélectionnons une intervalle trop importante, disons des élèves qui ont entre 13 et 16 de moyenne, nous pouvons observer que sur certains élèves l'attribution de la bourse n'a pas fait évoluer leur moyenne. Tendis que l'on observe une grande évolution pour d'autres. Mais cela peut etre du au fait que certains élèves ayant déjà une bonne moyenne ont moins de marge d'amélioration. 
+
+Ainsi, il est important de bien choisir la intervalle. Une bande trop grande peut faire que des différences dans les caractéristiques des groupes observés soient attribués à tort au traitement. En revanche une grande intervalle peut permettre d'avoir plus de données et donc une meilleure estimation. 
+
+Une intervalle petite peut quant à elle permettre d'éviter l'attribution des effets des caractéristiques des groupes au traitement. Mais elle peut créer des estimations trop incertaines car les estimations sont faites sur une fine partie de la population.
+
+#### 11. Suppose that you are including all households with poverty_index in between 53 and 63 (bandwidth=5). Before running an equation, what would you check to make sure that the regression discontinuity method is valid in this case, and why?
+
+Nous pouvons commencer par faire des graphiques avec les caractéristiques démographiques des ménages qui ont un index de pauvreté entre 53 et 63. Les différences dans ces caractéristiques doivent être très faibles et seulement causées par le hasard. 
+
+Ensuite, nous pouvons faire un test de densité McCarry. Les individus ne doivent pas pouvoir manipuler leur position. Ainsi, la densité des observations doit être continue de part et d’autre de la discontinuité. Pour cela on peut faire un graphique qui trace les lgines de densité de part et d'autre du seuil. Les lignes doivent se chevaucher.
+
+On peut faire des tests avec plusieurs tailles d'intervalles et observer la sensibilité des résultats à ces tailles.
+
+Enfin, nous pouvons faire des Placebo tests : Les variables de contrôles ne doivent pas être discontinues autour du seuil.
+
+
+
+
+

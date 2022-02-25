@@ -1,0 +1,3 @@
+"0","Hisp = read.csv(file = 'HISP.csv') #Create a dataset based on HISP"
+"0","Hisp_After = filter(Hisp, round == ""After"") #Create a dataset that only includes observations from after"
+"0","Hisp_After"
