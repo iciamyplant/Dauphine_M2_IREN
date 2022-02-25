@@ -1,5 +1,0 @@
-"0","method = c('OLS', 'OLS', 'IV', 'Diff-in-Diff', 'Diff-in-Diff')"
-"0","including_control_variable = c('no', 'yes', 'yes', 'no', 'yes')"
-"0","estimate = c(m1$coefficients[2],m2$coefficients[2],ivmodel$coefficients[2],m3$coefficients[4],m4$coefficients[17])"
-"0",""
-"0","cbind.data.frame(method, including_control_variable, estimate)"

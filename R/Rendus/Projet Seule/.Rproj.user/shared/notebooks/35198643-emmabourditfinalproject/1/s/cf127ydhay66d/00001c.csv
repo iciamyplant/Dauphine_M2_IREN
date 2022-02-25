@@ -1,7 +1,0 @@
-"0","Hisp_Treatment <- Hisp_Treatment %>%"
-"0","  mutate(is_enrolled = ifelse(enrolled == ""Enrolled"", 1, 0), the_round = ifelse(round == ""After"", 1, 0))"
-"0","Hisp_Treatment %>% "
-"0","  group_by(round,enrolled) %>%"
-"0","  summarise(mean(health_expenditures), mean(age_hh), mean(age_sp), mean(educ_hh), mean(educ_sp), mean(female_hh), mean(indigenous), mean(hhsize), mean(dirtfloor), mean(bathroom), mean(land), mean(land), mean(hospital_distance), mean(park), mean(sports))"
-"1","`summarise()` has grouped output by 'round'. You can override using the `.groups` argument.
-"

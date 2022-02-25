@@ -1,8 +1,0 @@
-"0","library(tidyverse)   # ggplot(), %>%, mutate(), and friends"
-"0","library(scales)      # Format numbers with functions like comma(), percent(), and dollar()"
-"0","library(broom)       # Convert models to data frames"
-"0","library(stargazer)   # Makes nice tables"
-"0","library(lmtest)      # To test linear regression models"
-"0","library(AER)         # Applied econometrics in R"
-"0","library(rdrobust)    # For robust nonparametric regression discontinuity"
-"0","library(rddensity)   # For nonparametric regression discontinuity density tests"
